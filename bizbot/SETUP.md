@@ -8,29 +8,38 @@ Answers for the automaton setup wizard, chosen for a **$10 test run**.
    recovery phrase on paper. Never share it or paste it anywhere, including into the automaton or a chat.
 2. **Get USDC on Base.** Buy about $12 of USDC and make sure it's on the **Base** network
    (Coinbase lets you withdraw USDC to Base directly). The extra $2 covers mistakes and fees.
-3. Copy your wallet's public address (starts with `0x`). You'll need it for the wizard.
+3. Your wallet address `0xc89cC7D72Fa1CA6d50E6B2D60871E660c3509a30` is already filled in below.
 
-## 2. Create the Conway sandbox
+## 2. Create the Conway sandbox and set up BizBot (answers filled in for you)
 
 1. Go to https://app.conway.tech, sign in and create a Linux sandbox (the smallest size is enough).
-2. Open its terminal and run:
+2. Open its terminal and paste this whole block:
 
    ```bash
-   curl -fsSL https://conway.tech/automaton.sh | sh
+   corepack enable pnpm 2>/dev/null || npm i -g pnpm
+   git clone -b claude/new-session-ap7s9g https://github.com/REB1236/Business-automate.git ~/bizbot
+   cd ~/bizbot && pnpm install && pnpm build
+   node bizbot/setup-bizbot.mjs
    ```
 
-   This installs Automaton, builds it and starts the setup wizard.
+   `setup-bizbot.mjs` answers every setup question for you, using the table below, and prints
+   BizBot's wallet address at the end.
+3. Start BizBot so it keeps running after you close the terminal:
 
-## 3. Wizard answers
+   ```bash
+   cd ~/bizbot && nohup node dist/index.js --run > ~/bizbot.log 2>&1 &
+   ```
+
+## 3. The answers the script gives
 
 | Wizard question | Answer |
 |---|---|
-| Chain type | press Enter (`evm`) |
-| Conway API key | provisioned automatically; if it fails, create one in the Conway dashboard |
+| Chain type | `evm` |
+| Conway API key | provisioned automatically; left blank if that fails (create one in the Conway dashboard) |
 | Name | `BizBot` |
-| Genesis prompt | paste the contents of `genesis-prompt.txt` |
-| Creator wallet address | **your** `0x...` address from step 1 |
-| OpenAI / Anthropic / Ollama | press Enter to skip (inference is billed through Conway) |
+| Genesis prompt | the contents of `genesis-prompt.txt` |
+| Creator wallet address | `0xc89cC7D72Fa1CA6d50E6B2D60871E660c3509a30` |
+| OpenAI / Anthropic / Ollama | blank (inference is billed through Conway) |
 | Max single transfer (cents) | `200` |
 | Max hourly transfers (cents) | `300` |
 | Max daily transfers (cents) | `500` |
@@ -50,6 +59,7 @@ to that address. On startup it automatically buys $5 of Conway credits from the 
 ## 5. Check on it
 
 ```bash
+tail -50 ~/bizbot.log
 node packages/cli/dist/index.js status
 node packages/cli/dist/index.js logs --tail 50
 cat ~/.automaton/REVENUE.md   # if BizBot followed the genesis prompt
