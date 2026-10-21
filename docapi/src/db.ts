@@ -60,6 +60,10 @@ export class Store {
       );
       CREATE INDEX IF NOT EXISTS usage_account_month ON usage(account_id, month);
     `);
+    // Columns added after the first release.
+    const columns = (this.db.prepare(`PRAGMA table_info(usage)`).all() as { name: string }[]).map((c) => c.name);
+    if (!columns.includes("cost_usd")) this.db.exec(`ALTER TABLE usage ADD COLUMN cost_usd REAL`);
+    if (!columns.includes("escalated")) this.db.exec(`ALTER TABLE usage ADD COLUMN escalated INTEGER`);
   }
 
   /** Creates an account and returns it with its API key. The key is never stored, only its hash. */
@@ -129,10 +133,24 @@ export class Store {
     return reserve.immediate();
   }
 
-  completeUsage(id: number, model: string, inputTokens: number, outputTokens: number): void {
+  completeUsage(id: number, r: { model: string; inputTokens: number; outputTokens: number; costUsd: number; escalated: boolean }): void {
     this.db
-      .prepare(`UPDATE usage SET status = 'ok', model = ?, input_tokens = ?, output_tokens = ? WHERE id = ?`)
-      .run(model, inputTokens, outputTokens, id);
+      .prepare(`UPDATE usage SET status = 'ok', model = ?, input_tokens = ?, output_tokens = ?, cost_usd = ?, escalated = ? WHERE id = ?`)
+      .run(r.model, r.inputTokens, r.outputTokens, r.costUsd, r.escalated ? 1 : 0, id);
+  }
+
+  /** Cost and volume figures for the owner. */
+  stats(month = currentMonth()) {
+    const byType = this.db
+      .prepare(
+        `SELECT doc_type, COUNT(*) AS documents, ROUND(AVG(cost_usd), 6) AS avg_cost_usd, ROUND(SUM(cost_usd), 6) AS total_cost_usd,
+                SUM(escalated) AS escalated, ROUND(AVG(input_tokens)) AS avg_input_tokens, ROUND(AVG(output_tokens)) AS avg_output_tokens
+         FROM usage WHERE status = 'ok' AND month = ? GROUP BY doc_type`,
+      )
+      .all(month);
+    const failed = (this.db.prepare(`SELECT COUNT(*) AS n FROM usage WHERE status = 'failed' AND month = ?`).get(month) as { n: number }).n;
+    const accounts = this.db.prepare(`SELECT plan, COUNT(*) AS accounts FROM accounts GROUP BY plan`).all();
+    return { month, documents_by_type: byType, failed_documents: failed, accounts_by_plan: accounts };
   }
 
   /** Failed extractions don't count against the quota. */

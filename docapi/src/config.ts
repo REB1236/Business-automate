@@ -1,4 +1,6 @@
 export type Plan = "free" | "starter" | "pro";
+export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
 
 export interface Config {
   port: number;
@@ -6,7 +8,10 @@ export interface Config {
   brandName: string;
   dbPath: string;
   model: string;
-  effort: "low" | "medium" | "high" | "xhigh" | "max";
+  effort: Effort;
+  escalationModel?: string;
+  escalationEffort: Effort;
+  adminToken?: string;
   maxFileBytes: number;
   monthlyLimits: Record<Plan, number>;
   stripe: {
@@ -25,18 +30,25 @@ function int(name: string, fallback: number): number {
   return value;
 }
 
+function effort(name: string, fallback: Effort): Effort {
+  const value = (process.env[name] || fallback) as Effort;
+  if (!EFFORTS.includes(value)) throw new Error(`${name} must be one of ${EFFORTS.join(", ")}`);
+  return value;
+}
+
 export function loadConfig(): Config {
-  const effort = (process.env.EFFORT ?? "medium") as Config["effort"];
-  if (!["low", "medium", "high", "xhigh", "max"].includes(effort)) {
-    throw new Error("EFFORT must be one of low, medium, high, xhigh, max");
-  }
+  // ESCALATION_MODEL="" turns escalation off; unset keeps the default.
+  const escalationModel = process.env.ESCALATION_MODEL ?? "claude-opus-5-5";
   return {
     port: int("PORT", 3000),
     baseUrl: (process.env.BASE_URL ?? "http://localhost:3000").replace(/\/$/, ""),
     brandName: process.env.BRAND_NAME ?? "DocExtract",
     dbPath: process.env.DB_PATH ?? "data/docapi.db",
-    model: process.env.MODEL ?? "claude-opus-5-5",
-    effort,
+    model: process.env.MODEL || "claude-haiku-5-5",
+    effort: effort("EFFORT", "low"),
+    escalationModel: escalationModel || undefined,
+    escalationEffort: effort("ESCALATION_EFFORT", "medium"),
+    adminToken: process.env.ADMIN_TOKEN || undefined,
     maxFileBytes: int("MAX_FILE_MB", 10) * 1024 * 1024,
     monthlyLimits: {
       free: int("LIMIT_FREE", 20),

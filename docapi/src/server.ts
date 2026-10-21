@@ -14,7 +14,12 @@ const store = new Store(config.dbPath);
 const app = buildApp({
   config,
   store,
-  extractor: createClaudeExtractor({ model: config.model, effort: config.effort }),
+  extractor: createClaudeExtractor({
+    model: config.model,
+    effort: config.effort,
+    escalationModel: config.escalationModel,
+    escalationEffort: config.escalationEffort,
+  }),
   stripe: config.stripe.secretKey ? new Stripe(config.stripe.secretKey) : null,
 });
 

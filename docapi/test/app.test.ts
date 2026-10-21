@@ -43,7 +43,15 @@ describe("docapi", () => {
     calls = 0;
     extractor = async ({ docType }) => {
       calls++;
-      return { data: { invoice_number: "INV-1", docType }, model: "test-model", inputTokens: 100, outputTokens: 50 };
+      return {
+        data: { invoice_number: "INV-1", docType },
+        checks: [],
+        model: "claude-haiku-5-5",
+        escalated: false,
+        inputTokens: 100,
+        outputTokens: 50,
+        costUsd: 0.000035,
+      };
     };
     app = buildApp({ config, store, extractor: (input) => extractor(input) });
   });
@@ -97,7 +105,12 @@ describe("docapi", () => {
       headers: { ...body.headers, authorization: `Bearer ${key}` },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ type: "invoice", data: { invoice_number: "INV-1", docType: "invoice" }, usage: { used: 1, limit: 2 } });
+    expect(res.json()).toEqual({
+      type: "invoice",
+      data: { invoice_number: "INV-1", docType: "invoice" },
+      checks: [],
+      usage: { used: 1, limit: 2 },
+    });
 
     const usage = await app.inject({ method: "GET", url: "/v1/usage", headers: { "x-api-key": key } });
     expect(usage.json()).toEqual({ plan: "free", used: 1, limit: 2 });
@@ -169,6 +182,21 @@ describe("docapi", () => {
   it("keeps paid plans closed when Stripe is not configured", async () => {
     const res = await app.inject({ method: "POST", url: "/billing/checkout", payload: { plan: "starter", email: "a@b.co" } });
     expect(res.statusCode).toBe(503);
+  });
+
+  it("hides admin stats without the token and shows cost with it", async () => {
+    expect((await app.inject({ method: "GET", url: "/admin/stats" })).statusCode).toBe(404);
+    await app.close();
+    app = buildApp({ config: { ...config, adminToken: "secret-admin" }, store, extractor: (input) => extractor(input) });
+    const key = await freeKey();
+    const body = multipartBody({ type: "invoice" }, pdf);
+    await app.inject({ method: "POST", url: "/v1/extract", payload: body.payload, headers: { ...body.headers, authorization: `Bearer ${key}` } });
+    expect((await app.inject({ method: "GET", url: "/admin/stats", headers: { authorization: "Bearer wrong" } })).statusCode).toBe(404);
+    const res = await app.inject({ method: "GET", url: "/admin/stats", headers: { authorization: "Bearer secret-admin" } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().documents_by_type[0]).toMatchObject({ doc_type: "invoice", documents: 1, avg_cost_usd: 0.000035 });
+    const viaQuery = await app.inject({ method: "GET", url: "/admin/stats?token=secret-admin" });
+    expect(viaQuery.statusCode).toBe(200);
   });
 
   it("builds a JSON schema for every document type", () => {

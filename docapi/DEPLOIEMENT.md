@@ -31,13 +31,21 @@ Onglet **Environment Variables**, ajoute :
 | `ANTHROPIC_API_KEY` | ta clé Claude `sk-ant-...` (coche **Is Secret** si l'option existe) |
 | `BASE_URL` | l'adresse publique de l'API, par exemple `https://api.ton-domaine.com` |
 
+Pour voir tes coûts (recommandé) :
+
+| Nom | Valeur |
+|---|---|
+| `ADMIN_TOKEN` | un long mot de passe que tu inventes (30 caractères ou plus), différent de tes autres mots de passe |
+
 Optionnel :
 
 | Nom | Par défaut | Rôle |
 |---|---|---|
 | `BRAND_NAME` | `DocExtract` | Le nom affiché sur la page d'accueil |
-| `MODEL` | `claude-opus-5-5` | Le modèle Claude utilisé |
-| `EFFORT` | `medium` | `low` coûte moins cher, `high` est plus précis |
+| `MODEL` | `claude-haiku-5-5` | Le modèle qui lit chaque document en premier (le moins cher) |
+| `EFFORT` | `low` | Effort du premier modèle |
+| `ESCALATION_MODEL` | `claude-opus-5-5` | Le modèle appelé seulement si les totaux ne collent pas. Mets une valeur vide pour ne jamais l'appeler |
+| `ESCALATION_EFFORT` | `medium` | Effort du modèle de secours |
 | `LIMIT_FREE` / `LIMIT_STARTER` / `LIMIT_PRO` | `20` / `300` / `1000` | Documents par mois et par forfait |
 
 ## 4. Nom de domaine
@@ -93,12 +101,18 @@ Commence en **mode test** de Stripe (clés `sk_test_...`, carte `4242 4242 4242 
 
 ## 7. Suivre tes coûts
 
-Chaque document traité enregistre ses tokens Claude. Pour voir le coût moyen par document,
-dans Coolify ouvre le **Terminal** de l'application et tape :
+Chaque document est d'abord lu par Claude Haiku 5.5, le modèle le moins cher. L'API vérifie ensuite
+que les montants s'additionnent. Si ce n'est pas le cas, Claude Opus 5.5 relit le document : il coûte
+plus cher, mais seulement pour les documents difficiles.
 
-```bash
-node -e 'const db=new (require("better-sqlite3"))("/app/data/docapi.db");console.log(db.prepare("SELECT doc_type, COUNT(*) n, AVG(input_tokens) avg_in, AVG(output_tokens) avg_out FROM usage WHERE status=\"ok\" GROUP BY doc_type").all())'
+Pour voir le coût réel, ouvre dans ton navigateur (avec ton `ADMIN_TOKEN`) :
+
+```
+https://TON-ADRESSE/admin/stats?token=TON_ADMIN_TOKEN
 ```
 
-Avec `claude-opus-5-5` : coût ≈ (avg_in × 4 + avg_out × 20) / 1 000 000 dollars par document.
-Vérifie que ce coût reste bien en dessous de ton prix de vente par document (19 € / 300 ≈ 0,063 €).
+Tu y vois, pour le mois en cours et par type de document : le nombre de documents, le coût moyen
+(`avg_cost_usd`), le coût total, combien ont eu besoin d'Opus (`escalated`), et le nombre de clients
+par forfait. Ne partage pas cette adresse : elle contient ton mot de passe admin.
+
+Compare `avg_cost_usd` à ton prix de vente par document (19 € / 300 ≈ 0,063 €).

@@ -1,6 +1,6 @@
 # docapi
 
-Document extraction API: invoices, purchase orders and bank statements (PDF or image) to JSON, using Claude structured outputs. Free, Starter and Pro plans with monthly quotas; paid plans through Stripe Checkout.
+Document extraction API: invoices, purchase orders and bank statements (PDF or image) to JSON, using Claude structured outputs. Each document is read by Claude Haiku 5.5 first; if the extracted amounts don't add up, Claude Opus 5.5 reads it again. The arithmetic checks are returned to the customer. Free, Starter and Pro plans with monthly quotas; paid plans through Stripe Checkout.
 
 Deployment guide (French): [DEPLOIEMENT.md](DEPLOIEMENT.md).
 
@@ -25,6 +25,7 @@ npm run dev
 | POST | `/billing/checkout` | – | Form: `plan`, `email` → Stripe Checkout |
 | GET | `/billing/success` | – | Shows the new API key once after payment |
 | POST | `/billing/webhook` | Stripe signature | Subscription updates and cancellations |
+| GET | `/admin/stats` | `ADMIN_TOKEN` (header or `?token=`) | Documents, Claude cost and accounts for the month |
 
 Send the key as `Authorization: Bearer <key>` or `x-api-key: <key>`. Keys are stored hashed. Documents are not stored. Failed extractions don't count against the quota.
 

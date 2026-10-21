@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import multipart from "@fastify/multipart";
 import formbody from "@fastify/formbody";
 import Stripe from "stripe";
+import crypto from "crypto";
 import type { Config, Plan } from "./config.js";
 import type { Account, Store } from "./db.js";
 import { DOC_TYPES, type DocType } from "./schemas.js";
@@ -13,6 +14,12 @@ export interface AppDeps {
   store: Store;
   extractor: Extractor;
   stripe?: Stripe | null;
+}
+
+function safeEqual(a: string, b: string): boolean {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -112,14 +119,24 @@ export function buildApp({ config, store, extractor, stripe = null }: AppDeps): 
 
     try {
       const result = await extractor({ file, mediaType: mediaType as MediaType, docType: docType as DocType });
-      store.completeUsage(reservation, result.model, result.inputTokens, result.outputTokens);
-      return { type: docType, data: result.data, usage: { used: store.usedThisMonth(account.id), limit } };
+      store.completeUsage(reservation, result);
+      return { type: docType, data: result.data, checks: result.checks, usage: { used: store.usedThisMonth(account.id), limit } };
     } catch (err) {
       store.failUsage(reservation);
       if (err instanceof ExtractionError) return reply.code(422).send({ error: err.message });
       request.log.error({ err }, "extraction failed");
       return reply.code(502).send({ error: "Extraction failed. This request was not counted. Please retry." });
     }
+  });
+
+  // Owner-only figures: documents, Claude cost and accounts for the month.
+  // The token can also be passed as ?token=... so the page opens in a browser.
+  app.get<{ Querystring: { month?: string; token?: string } }>("/admin/stats", async (request, reply) => {
+    const header = request.headers.authorization ?? "";
+    const given = header.startsWith("Bearer ") ? header.slice(7) : (request.query.token ?? "");
+    if (!config.adminToken || !safeEqual(given, config.adminToken)) return reply.code(404).send({ error: "Not found" });
+    const month = /^\d{4}-\d{2}$/.test(request.query.month ?? "") ? request.query.month : undefined;
+    return store.stats(month);
   });
 
   // ─── Billing (Stripe) ────────────────────────────────────────

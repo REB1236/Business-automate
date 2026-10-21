@@ -67,10 +67,15 @@ export function landingPage(config: Config, paidPlansEnabled: boolean): string {
     "line_items": [ { "description": "Paper A4", "quantity": 10, "unit_price": 4.5, "amount": 45 } ],
     "subtotal": 45, "tax_total": 9, "total": 54
   },
+  "checks": [
+    { "name": "line_1_amount", "status": "pass" },
+    { "name": "lines_sum_to_subtotal", "status": "pass" },
+    { "name": "subtotal_plus_tax_equals_total", "status": "pass" }
+  ],
   "usage": { "used": 1, "limit": ${starter} }
 }</code></pre>
 
-<p class="muted"><code>type</code> is <code>invoice</code>, <code>purchase_order</code>, <code>bank_statement</code> or <code>auto</code>. Missing values come back as <code>null</code>, never guessed. Documents are processed in memory and not stored.</p>
+<p class="muted"><code>type</code> is <code>invoice</code>, <code>purchase_order</code>, <code>bank_statement</code> or <code>auto</code>. Missing values come back as <code>null</code>, never guessed. Every answer is checked: line amounts, subtotal, tax and total (or the statement balance) must add up, and <code>checks</code> tells you which ones did. Documents are processed in memory and not stored.</p>
 
 <h2>Pricing</h2>
 <div class="plans">
