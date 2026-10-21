@@ -140,3 +140,17 @@ describe("cheap-first extraction", () => {
     expect(result.checks.some((c) => c.status === "fail")).toBe(true);
   });
 });
+
+describe("normalize", async () => {
+  const { normalize } = await import("../src/normalize.js");
+  it("turns currency symbols into ISO codes at any depth", () => {
+    expect(normalize({ currency: "$", invoice: { currency: "€" }, items: [{ currency: "dh" }] })).toEqual({
+      currency: "USD",
+      invoice: { currency: "EUR" },
+      items: [{ currency: "MAD" }],
+    });
+    expect(normalize({ currency: "usd" })).toEqual({ currency: "USD" });
+    expect(normalize({ currency: null })).toEqual({ currency: null });
+    expect(normalize({ currency: "R$" })).toEqual({ currency: "R$" });
+  });
+});
