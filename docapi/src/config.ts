@@ -30,6 +30,12 @@ function int(name: string, fallback: number): number {
   return value;
 }
 
+/** Strips whitespace and wrapping quotes that hosting panels sometimes keep around a value. */
+function cleanSecret(raw: string | undefined): string | undefined {
+  const value = raw?.trim().replace(/^(["'])(.*)\1$/, "$2").trim();
+  return value || undefined;
+}
+
 function effort(name: string, fallback: Effort): Effort {
   const value = (process.env[name] || fallback) as Effort;
   if (!EFFORTS.includes(value)) throw new Error(`${name} must be one of ${EFFORTS.join(", ")}`);
@@ -48,7 +54,7 @@ export function loadConfig(): Config {
     effort: effort("EFFORT", "low"),
     escalationModel: escalationModel || undefined,
     escalationEffort: effort("ESCALATION_EFFORT", "medium"),
-    adminToken: process.env.ADMIN_TOKEN || undefined,
+    adminToken: cleanSecret(process.env.ADMIN_TOKEN),
     maxFileBytes: int("MAX_FILE_MB", 10) * 1024 * 1024,
     monthlyLimits: {
       free: int("LIMIT_FREE", 20),

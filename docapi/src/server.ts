@@ -31,4 +31,9 @@ const shutdown = async () => {
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
 
+app.log.info(
+  config.adminToken ? `Admin stats enabled (token is ${config.adminToken.length} characters)` : "Admin stats disabled (ADMIN_TOKEN not set)",
+);
+app.log.info(`Models: ${config.model} (${config.effort}), escalation: ${config.escalationModel ?? "off"}`);
+
 await app.listen({ port: config.port, host: "0.0.0.0" });
