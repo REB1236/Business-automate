@@ -58,7 +58,7 @@ const SYSTEM = `You extract structured data from business documents (invoices, p
 
 Rules:
 - Use only what is printed on the document. If a value is missing or unreadable, return null. Never guess or invent values.
-- Currency: the 3-letter ISO 4217 code (USD, EUR, GBP, MAD...), never a symbol. If only a symbol is printed, infer the code from the issuer's country.
+- Currency: the 3-letter ISO 4217 code (USD, EUR, GBP, MAD...), never a symbol. Use the currency the amounts are printed in: $ is USD unless the document names another dollar currency (CAD, AUD...), € is EUR, £ is GBP. Never infer the currency from a company's address or country.
 - Dates: YYYY-MM-DD. Amounts: plain numbers with a dot as the decimal separator, without currency symbols or thousands separators.
 - Keep text values (names, descriptions, addresses) as written on the document.
 - Include every line item or transaction, in document order.
