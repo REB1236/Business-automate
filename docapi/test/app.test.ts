@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
-import { buildApp } from "../src/app.js";
+import { buildApp, redactUrl } from "../src/app.js";
 import { loadConfig, type Config } from "../src/config.js";
 import { Store } from "../src/db.js";
 import { ExtractionError, type Extractor } from "../src/extract.js";
@@ -197,6 +197,11 @@ describe("docapi", () => {
     expect(res.json().documents_by_type[0]).toMatchObject({ doc_type: "invoice", documents: 1, avg_cost_usd: 0.000035 });
     const viaQuery = await app.inject({ method: "GET", url: "/admin/stats?token=secret-admin" });
     expect(viaQuery.statusCode).toBe(200);
+  });
+
+  it("redacts the admin token from logged URLs", () => {
+    expect(redactUrl("/admin/stats?token=abc123&month=2026-10")).toBe("/admin/stats?token=REDACTED&month=2026-10");
+    expect(redactUrl("/v1/usage")).toBe("/v1/usage");
   });
 
   it("builds a JSON schema for every document type", () => {

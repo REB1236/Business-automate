@@ -16,6 +16,10 @@ export interface AppDeps {
   stripe?: Stripe | null;
 }
 
+export function redactUrl(url: string): string {
+  return url.replace(/([?&]token=)[^&]*/g, "$1REDACTED");
+}
+
 function safeEqual(a: string, b: string): boolean {
   const x = Buffer.from(a);
   const y = Buffer.from(b);
@@ -26,7 +30,18 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const FREE_SIGNUPS_PER_IP_PER_DAY = 3;
 
 export function buildApp({ config, store, extractor, stripe = null }: AppDeps): FastifyInstance {
-  const app = Fastify({ logger: process.env.NODE_ENV !== "test", trustProxy: true });
+  const app = Fastify({
+    logger:
+      process.env.NODE_ENV === "test"
+        ? false
+        : {
+            serializers: {
+              // Never write the admin token to the logs.
+              req: (req) => ({ method: req.method, url: redactUrl(req.url), remoteAddress: req.ip }),
+            },
+          },
+    trustProxy: true,
+  });
   app.register(formbody);
   app.register(multipart, { limits: { fileSize: config.maxFileBytes, files: 1, fields: 5 } });
 
