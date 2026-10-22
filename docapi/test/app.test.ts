@@ -199,6 +199,23 @@ describe("docapi", () => {
     expect(viaQuery.statusCode).toBe(200);
   });
 
+  it("serves documentation, use-case pages and discovery files", async () => {
+    for (const path of ["/docs", "/invoice-to-json", "/bank-statement-to-json", "/purchase-order-to-json"]) {
+      const res = await app.inject({ method: "GET", url: path });
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toContain('<meta name="description"');
+      expect(res.body).toContain("/v1/extract");
+    }
+    const sitemap = await app.inject({ method: "GET", url: "/sitemap.xml" });
+    expect(sitemap.body).toContain("/invoice-to-json</loc>");
+    expect((await app.inject({ method: "GET", url: "/robots.txt" })).body).toContain("Disallow: /admin/");
+    expect((await app.inject({ method: "GET", url: "/llms.txt" })).body).toContain("POST");
+    const spec = (await app.inject({ method: "GET", url: "/openapi.json" })).json();
+    expect(spec.openapi).toBe("3.1.0");
+    expect(spec.paths["/v1/extract"].post).toBeTruthy();
+    expect((await app.inject({ method: "GET", url: "/" })).body).toContain('"@type":"SoftwareApplication"');
+  });
+
   it("redacts the admin token from logged URLs", () => {
     expect(redactUrl("/admin/stats?token=abc123&month=2026-10")).toBe("/admin/stats?token=REDACTED&month=2026-10");
     expect(redactUrl("/v1/usage")).toBe("/v1/usage");

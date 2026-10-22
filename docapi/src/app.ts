@@ -8,6 +8,7 @@ import { DOC_TYPES, type DocType } from "./schemas.js";
 import { ExtractionError, SUPPORTED_MEDIA_TYPES, type Extractor, type MediaType } from "./extract.js";
 import { keyPage, landingPage, legalPage, messagePage, pendingPage } from "./pages.js";
 import { PAID_STATUSES, type Billing } from "./billing.js";
+import { USE_CASES, docsPage, llmsTxt, openApiSpec, robotsTxt, sitemapXml, useCasePage } from "./seo.js";
 
 export interface AppDeps {
   config: Config;
@@ -66,6 +67,14 @@ export function buildApp({ config, store, extractor, billing = null }: AppDeps):
 
   app.get("/", async (_request, reply) => reply.type("text/html").send(landingPage(config, billingEnabled)));
   app.get("/health", async () => ({ ok: true }));
+  app.get("/docs", async (_request, reply) => reply.type("text/html").send(docsPage(config)));
+  for (const useCase of USE_CASES) {
+    app.get(`/${useCase.slug}`, async (_request, reply) => reply.type("text/html").send(useCasePage(config, useCase)));
+  }
+  app.get("/sitemap.xml", async (_request, reply) => reply.type("application/xml").send(sitemapXml(config)));
+  app.get("/robots.txt", async (_request, reply) => reply.type("text/plain").send(robotsTxt(config)));
+  app.get("/llms.txt", async (_request, reply) => reply.type("text/plain; charset=utf-8").send(llmsTxt(config)));
+  app.get("/openapi.json", async () => openApiSpec(config));
   for (const page of ["terms", "privacy", "refunds"] as const) {
     app.get(`/${page}`, async (_request, reply) => reply.type("text/html").send(legalPage(config, page)));
   }

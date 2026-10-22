@@ -133,3 +133,18 @@ Tu y vois, pour le mois en cours et par type de document : le nombre de document
 par forfait. Ne partage pas cette adresse : elle contient ton mot de passe admin.
 
 Compare `avg_cost_usd` à ton prix de vente par document (19 € / 300 ≈ 0,063 €).
+
+## 8. Déploiement automatique (une seule fois)
+
+Pour que chaque amélioration poussée sur GitHub soit mise en ligne sans que tu cliques sur « Redeploy » :
+
+1. Dans Coolify, ouvre ton application → onglet **Webhooks**. Dans la partie **GitHub**, invente un
+   **secret** (lettres et chiffres), enregistre, et copie l'**URL du webhook**.
+2. Sur GitHub : ton dépôt **Business-automate** → **Settings** → **Webhooks** → **Add webhook** :
+   - **Payload URL** : l'URL copiée depuis Coolify
+   - **Content type** : `application/json`
+   - **Secret** : le même secret
+   - **Which events** : « Just the push event »
+3. Enregistre. GitHub envoie un « ping » : il doit apparaître avec une coche verte.
+
+Ensuite, chaque mise à jour sur la branche `main` est déployée automatiquement.

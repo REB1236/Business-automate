@@ -3,13 +3,33 @@ import type { Config } from "./config.js";
 const escape = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-function layout(title: string, body: string, contact?: string, extraHead = ""): string {
+export interface Seo {
+  baseUrl: string;
+  path: string;
+  description: string;
+  jsonLd?: object;
+}
+
+export function layout(title: string, body: string, contact?: string, extraHead = "", seo?: Seo): string {
+  const url = seo ? `${seo.baseUrl}${seo.path}` : "";
+  const seoHead = seo
+    ? `
+<meta name="description" content="${escape(seo.description)}">
+<link rel="canonical" href="${escape(url)}">
+<meta property="og:type" content="website">
+<meta property="og:title" content="${escape(title)}">
+<meta property="og:description" content="${escape(seo.description)}">
+<meta property="og:url" content="${escape(url)}">
+<meta name="twitter:card" content="summary">${
+        seo.jsonLd ? `\n<script type="application/ld+json">${JSON.stringify(seo.jsonLd).replace(/</g, "\\u003c")}</script>` : ""
+      }`
+    : "";
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escape(title)}</title>${extraHead}
+<title>${escape(title)}</title>${seoHead}${extraHead}
 <style>
   :root { --bg: #fafaf9; --fg: #1c1917; --muted: #57534e; --card: #ffffff; --line: #e7e5e4; --accent: #1d4ed8; }
   @media (prefers-color-scheme: dark) { :root { --bg: #1c1917; --fg: #f5f5f4; --muted: #a8a29e; --card: #292524; --line: #44403c; --accent: #60a5fa; } }
@@ -30,10 +50,18 @@ function layout(title: string, body: string, contact?: string, extraHead = ""): 
   form { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
   footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; }
   footer a { color: var(--muted); }
+  nav { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 32px; font-size: 0.95rem; }
+  nav a { color: var(--muted); text-decoration: none; }
+  nav a:first-child { color: var(--fg); font-weight: 700; margin-right: auto; }
+  a { color: var(--accent); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.92rem; display: block; overflow-x: auto; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
   .key { font-family: ui-monospace, monospace; word-break: break-all; background: var(--card); border: 1px solid var(--line); padding: 14px; border-radius: 8px; }
 </style>
 </head>
-<body><main>${body}
+<body><main>
+<nav><a href="/">DocExtract</a><a href="/docs">Docs</a><a href="/invoice-to-json">Invoices</a><a href="/bank-statement-to-json">Bank statements</a><a href="/purchase-order-to-json">Purchase orders</a><a href="/#pricing">Pricing</a></nav>
+${body}
 <footer>
   <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/refunds">Refunds</a>${contact ? ` · <a href="mailto:${escape(contact)}">${escape(contact)}</a>` : ""}
 </footer>
@@ -83,11 +111,11 @@ export function landingPage(config: Config, paidPlansEnabled: boolean): string {
 
 <p class="muted"><code>type</code> is <code>invoice</code>, <code>purchase_order</code>, <code>bank_statement</code> or <code>auto</code>. Missing values come back as <code>null</code>, never guessed. Every answer is checked: line amounts, subtotal, tax and total (or the statement balance) must add up, and <code>checks</code> tells you which ones did. Documents are processed in memory and not stored.</p>
 
-<h2>Pricing</h2>
+<h2 id="pricing">Pricing</h2>
 <div class="plans">
   <div class="plan">
     <div><strong>Free</strong></div>
-    <div class="price">€0</div>
+    <div class="price">$0</div>
     <div class="muted">${free} documents / month</div>
     <form id="free-form">
       <input type="email" name="email" placeholder="you@company.com" required>
@@ -97,13 +125,13 @@ export function landingPage(config: Config, paidPlansEnabled: boolean): string {
   </div>
   <div class="plan">
     <div><strong>Starter</strong></div>
-    <div class="price">€19 <span class="muted" style="font-size:1rem">/ month</span></div>
+    <div class="price">$19 <span class="muted" style="font-size:1rem">/ month</span></div>
     <div class="muted">${starter} documents / month</div>
     ${paidForm("starter")}
   </div>
   <div class="plan">
     <div><strong>Pro</strong></div>
-    <div class="price">€49 <span class="muted" style="font-size:1rem">/ month</span></div>
+    <div class="price">$49 <span class="muted" style="font-size:1rem">/ month</span></div>
     <div class="muted">${pro} documents / month</div>
     ${paidForm("pro")}
   </div>
@@ -131,6 +159,27 @@ document.getElementById("free-form").addEventListener("submit", async (e) => {
 </script>
 `,
     config.contactEmail,
+    "",
+    {
+      baseUrl: config.baseUrl,
+      path: "/",
+      description:
+        "Document extraction API: send an invoice, purchase order or bank statement (PDF or image) and get structured JSON with verified totals. Free plan, then from $19/month.",
+      jsonLd: {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        name: config.brandName,
+        applicationCategory: "BusinessApplication",
+        operatingSystem: "Web API",
+        url: config.baseUrl,
+        description: "API that turns invoices, purchase orders and bank statements into structured JSON with arithmetic checks.",
+        offers: [
+          { "@type": "Offer", name: "Free", price: "0", priceCurrency: "USD" },
+          { "@type": "Offer", name: "Starter", price: "19", priceCurrency: "USD" },
+          { "@type": "Offer", name: "Pro", price: "49", priceCurrency: "USD" },
+        ],
+      },
+    },
   );
 }
 
