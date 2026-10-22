@@ -9,9 +9,8 @@ export interface Account {
   email: string;
   plan: Plan;
   key_prefix: string;
-  stripe_customer_id: string | null;
-  stripe_subscription_id: string | null;
-  checkout_session_id: string | null;
+  billing_customer_id: string | null;
+  billing_subscription_id: string | null;
   created_at: string;
 }
 
@@ -41,9 +40,6 @@ export class Store {
         plan TEXT NOT NULL,
         key_hash TEXT NOT NULL UNIQUE,
         key_prefix TEXT NOT NULL,
-        stripe_customer_id TEXT,
-        stripe_subscription_id TEXT UNIQUE,
-        checkout_session_id TEXT UNIQUE,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
       CREATE INDEX IF NOT EXISTS accounts_email ON accounts(email);
@@ -64,30 +60,42 @@ export class Store {
     const columns = (this.db.prepare(`PRAGMA table_info(usage)`).all() as { name: string }[]).map((c) => c.name);
     if (!columns.includes("cost_usd")) this.db.exec(`ALTER TABLE usage ADD COLUMN cost_usd REAL`);
     if (!columns.includes("escalated")) this.db.exec(`ALTER TABLE usage ADD COLUMN escalated INTEGER`);
+    // Billing columns (databases created by the first release also have unused stripe_* columns).
+    const accountColumns = (this.db.prepare(`PRAGMA table_info(accounts)`).all() as { name: string }[]).map((c) => c.name);
+    if (!accountColumns.includes("billing_customer_id")) this.db.exec(`ALTER TABLE accounts ADD COLUMN billing_customer_id TEXT`);
+    if (!accountColumns.includes("billing_subscription_id")) this.db.exec(`ALTER TABLE accounts ADD COLUMN billing_subscription_id TEXT`);
+    this.db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS accounts_billing_subscription ON accounts(billing_subscription_id);
+      CREATE TABLE IF NOT EXISTS pending_checkouts (
+        token TEXT PRIMARY KEY,
+        plan TEXT NOT NULL,
+        account_id INTEGER REFERENCES accounts(id),
+        api_key TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
   }
 
   /** Creates an account and returns it with its API key. The key is never stored, only its hash. */
   createAccount(input: {
     email: string;
     plan: Plan;
-    stripeCustomerId?: string | null;
-    stripeSubscriptionId?: string | null;
-    checkoutSessionId?: string | null;
+    billingCustomerId?: string | null;
+    billingSubscriptionId?: string | null;
   }): { account: Account; key: string } {
     const key = generateKey();
     const result = this.db
       .prepare(
-        `INSERT INTO accounts (email, plan, key_hash, key_prefix, stripe_customer_id, stripe_subscription_id, checkout_session_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO accounts (email, plan, key_hash, key_prefix, billing_customer_id, billing_subscription_id)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.email,
         input.plan,
         hashKey(key),
         key.slice(0, 12),
-        input.stripeCustomerId ?? null,
-        input.stripeSubscriptionId ?? null,
-        input.checkoutSessionId ?? null,
+        input.billingCustomerId ?? null,
+        input.billingSubscriptionId ?? null,
       );
     return { account: this.getAccount(Number(result.lastInsertRowid))!, key };
   }
@@ -101,17 +109,64 @@ export class Store {
   }
 
   findFreeByEmail(email: string): Account | undefined {
-    return this.db.prepare(`SELECT * FROM accounts WHERE email = ? AND plan = 'free' AND stripe_subscription_id IS NULL`).get(email) as
+    return this.db.prepare(`SELECT * FROM accounts WHERE email = ? AND plan = 'free' AND billing_subscription_id IS NULL`).get(email) as
       | Account
       | undefined;
   }
 
-  findByCheckoutSession(sessionId: string): Account | undefined {
-    return this.db.prepare(`SELECT * FROM accounts WHERE checkout_session_id = ?`).get(sessionId) as Account | undefined;
+  findBySubscription(subscriptionId: string): Account | undefined {
+    return this.db.prepare(`SELECT * FROM accounts WHERE billing_subscription_id = ?`).get(subscriptionId) as Account | undefined;
   }
 
   setPlanBySubscription(subscriptionId: string, plan: Plan): boolean {
-    return this.db.prepare(`UPDATE accounts SET plan = ? WHERE stripe_subscription_id = ?`).run(plan, subscriptionId).changes > 0;
+    return this.db.prepare(`UPDATE accounts SET plan = ? WHERE billing_subscription_id = ?`).run(plan, subscriptionId).changes > 0;
+  }
+
+  createPendingCheckout(token: string, plan: Plan): void {
+    this.db.prepare(`INSERT INTO pending_checkouts (token, plan) VALUES (?, ?)`).run(token, plan);
+  }
+
+  getPendingCheckout(token: string): { token: string; plan: Plan; account_id: number | null; api_key: string | null } | undefined {
+    return this.db.prepare(`SELECT token, plan, account_id, api_key FROM pending_checkouts WHERE token = ?`).get(token) as any;
+  }
+
+  /**
+   * Called from the payment webhook: creates the paid account once per subscription and keeps
+   * its key on the pending checkout until the buyer's success page shows it.
+   */
+  fulfillCheckout(input: {
+    token: string | null;
+    email: string;
+    plan: Plan;
+    customerId: string;
+    subscriptionId: string;
+  }): Account {
+    return this.db.transaction(() => {
+      const existing = this.findBySubscription(input.subscriptionId);
+      if (existing) return existing;
+      const { account, key } = this.createAccount({
+        email: input.email,
+        plan: input.plan,
+        billingCustomerId: input.customerId,
+        billingSubscriptionId: input.subscriptionId,
+      });
+      if (input.token) {
+        this.db
+          .prepare(`UPDATE pending_checkouts SET account_id = ?, api_key = ? WHERE token = ? AND account_id IS NULL`)
+          .run(account.id, key, input.token);
+      }
+      return account;
+    })();
+  }
+
+  /** Returns the key once, then forgets it. */
+  revealCheckoutKey(token: string): string | null {
+    return this.db.transaction(() => {
+      const row = this.getPendingCheckout(token);
+      if (!row?.api_key) return null;
+      this.db.prepare(`UPDATE pending_checkouts SET api_key = NULL WHERE token = ?`).run(token);
+      return row.api_key;
+    })();
   }
 
   /**

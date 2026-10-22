@@ -1,8 +1,8 @@
-import Stripe from "stripe";
 import { loadConfig } from "./config.js";
 import { Store } from "./db.js";
 import { createClaudeExtractor } from "./extract.js";
 import { buildApp } from "./app.js";
+import { createLemonSqueezy } from "./billing.js";
 
 const config = loadConfig();
 if (!process.env.ANTHROPIC_API_KEY) {
@@ -20,7 +20,14 @@ const app = buildApp({
     escalationModel: config.escalationModel,
     escalationEffort: config.escalationEffort,
   }),
-  stripe: config.stripe.secretKey ? new Stripe(config.stripe.secretKey) : null,
+  billing:
+    config.lemonSqueezy.apiKey && config.lemonSqueezy.storeId && config.lemonSqueezy.webhookSecret
+      ? createLemonSqueezy({
+          apiKey: config.lemonSqueezy.apiKey,
+          storeId: config.lemonSqueezy.storeId,
+          webhookSecret: config.lemonSqueezy.webhookSecret,
+        })
+      : null,
 });
 
 const shutdown = async () => {
@@ -33,6 +40,12 @@ process.on("SIGINT", shutdown);
 
 app.log.info(
   config.adminToken ? `Admin stats enabled (token is ${config.adminToken.length} characters)` : "Admin stats disabled (ADMIN_TOKEN not set)",
+);
+const ls = config.lemonSqueezy;
+app.log.info(
+  ls.apiKey && ls.storeId && ls.webhookSecret && ls.variantStarter && ls.variantPro
+    ? "Paid plans enabled (Lemon Squeezy)"
+    : "Paid plans disabled (Lemon Squeezy not fully configured)",
 );
 app.log.info(`Models: ${config.model} (${config.effort}), escalation: ${config.escalationModel ?? "off"}`);
 

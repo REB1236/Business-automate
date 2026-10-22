@@ -3,13 +3,13 @@ import type { Config } from "./config.js";
 const escape = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-function layout(title: string, body: string): string {
+function layout(title: string, body: string, contact?: string, extraHead = ""): string {
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escape(title)}</title>
+<title>${escape(title)}</title>${extraHead}
 <style>
   :root { --bg: #fafaf9; --fg: #1c1917; --muted: #57534e; --card: #ffffff; --line: #e7e5e4; --accent: #1d4ed8; }
   @media (prefers-color-scheme: dark) { :root { --bg: #1c1917; --fg: #f5f5f4; --muted: #a8a29e; --card: #292524; --line: #44403c; --accent: #60a5fa; } }
@@ -28,10 +28,16 @@ function layout(title: string, body: string): string {
   input, button { font: inherit; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); width: 100%; }
   button { background: var(--accent); color: #fff; border: 0; cursor: pointer; font-weight: 600; }
   form { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+  footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; }
+  footer a { color: var(--muted); }
   .key { font-family: ui-monospace, monospace; word-break: break-all; background: var(--card); border: 1px solid var(--line); padding: 14px; border-radius: 8px; }
 </style>
 </head>
-<body><main>${body}</main></body>
+<body><main>${body}
+<footer>
+  <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/refunds">Refunds</a>${contact ? ` · <a href="mailto:${escape(contact)}">${escape(contact)}</a>` : ""}
+</footer>
+</main></body>
 </html>`;
 }
 
@@ -102,7 +108,7 @@ export function landingPage(config: Config, paidPlansEnabled: boolean): string {
     ${paidForm("pro")}
   </div>
 </div>
-<p class="muted">Failed extractions are not counted. Cancel anytime.</p>
+<p class="muted">Failed extractions are not counted. Cancel anytime. Payments are processed by Lemon Squeezy, our reseller and Merchant of Record, who handles sales tax and VAT.</p>
 
 <script>
 document.getElementById("free-form").addEventListener("submit", async (e) => {
@@ -124,6 +130,7 @@ document.getElementById("free-form").addEventListener("submit", async (e) => {
 });
 </script>
 `,
+    config.contactEmail,
   );
 }
 
@@ -134,9 +141,82 @@ export function keyPage(config: Config, key: string, plan: string): string {
 <p class="lead">Your ${escape(plan)} plan is active. Here is your API key. It is shown only once, so save it now.</p>
 <div class="key">${escape(key)}</div>
 <p><a href="/">Back to the docs</a></p>`,
+    config.contactEmail,
   );
 }
 
 export function messagePage(config: Config, title: string, message: string): string {
-  return layout(`${config.brandName}: ${title}`, `<h1>${escape(title)}</h1><p class="lead">${escape(message)}</p><p><a href="/">Back</a></p>`);
+  return layout(
+    `${config.brandName}: ${title}`,
+    `<h1>${escape(title)}</h1><p class="lead">${escape(message)}</p><p><a href="/">Back</a></p>`,
+    config.contactEmail,
+  );
+}
+
+export function pendingPage(config: Config): string {
+  return layout(
+    `${config.brandName}: confirming payment`,
+    `<h1>Confirming your payment…</h1>
+<p class="lead">This usually takes a few seconds. This page refreshes by itself and will show your API key.</p>`,
+    config.contactEmail,
+    `<meta http-equiv="refresh" content="4">`,
+  );
+}
+
+export function legalPage(config: Config, page: "terms" | "privacy" | "refunds"): string {
+  const name = escape(config.legalName);
+  const brand = escape(config.brandName);
+  const contact = config.contactEmail
+    ? `<a href="mailto:${escape(config.contactEmail)}">${escape(config.contactEmail)}</a>`
+    : "the contact address on our website";
+  const updated = "October 22, 2026";
+
+  const pages = {
+    terms: {
+      title: "Terms of Service",
+      body: `
+<p>These terms govern your use of ${brand} (the "Service"), operated by ${name}. By creating an API key or subscribing, you agree to them.</p>
+<h2>The Service</h2>
+<p>${brand} extracts structured data from documents you upload (invoices, purchase orders, bank statements) using automated AI models. Results are generated automatically and may contain errors. You are responsible for reviewing results before relying on them, especially for accounting, tax or legal purposes.</p>
+<h2>Your account and API key</h2>
+<p>Keep your API key secret. You are responsible for all usage made with it. Each plan includes a monthly number of documents; requests beyond it are refused until the next month or an upgrade.</p>
+<h2>Acceptable use</h2>
+<p>Only upload documents you have the right to process. Do not use the Service for unlawful purposes, to process data you are not authorized to process, or to attempt to disrupt, overload or reverse-engineer the Service. We may suspend keys that break these rules.</p>
+<h2>Subscriptions and payment</h2>
+<p>Paid plans are billed monthly in advance through our reseller Lemon Squeezy, who acts as Merchant of Record. You can cancel at any time; your plan stays active until the end of the paid period. Refunds are described in our <a href="/refunds">Refund Policy</a>.</p>
+<h2>Availability and changes</h2>
+<p>We aim to keep the Service available but do not guarantee uninterrupted operation. We may change features or prices; price changes apply from your next billing period and are announced in advance.</p>
+<h2>Liability</h2>
+<p>The Service is provided "as is". To the extent permitted by law, ${name} is not liable for indirect or consequential damages, and our total liability is limited to the amount you paid for the Service in the 3 months before the claim.</p>
+<h2>Contact</h2>
+<p>Questions about these terms: ${contact}.</p>`,
+    },
+    privacy: {
+      title: "Privacy Policy",
+      body: `
+<p>This policy explains what data ${brand}, operated by ${name}, processes and why.</p>
+<h2>Documents you upload</h2>
+<p>Documents are processed in memory to produce the extraction result and are not stored by us. To perform the extraction, documents are sent to our AI provider, Anthropic, which processes them on our behalf.</p>
+<h2>Account data</h2>
+<p>We store your email address, your plan, a one-way hash of your API key (never the key itself), and counts of documents processed per month, including the estimated processing cost. We use this to run the Service, enforce plan limits and contact you about your account.</p>
+<h2>Payments</h2>
+<p>Payments are handled by Lemon Squeezy as Merchant of Record. We do not receive or store your card details. Lemon Squeezy shares with us your email, subscription status and plan.</p>
+<h2>Technical logs</h2>
+<p>Our servers keep short-lived technical logs (request time, path, IP address, response status) for security and troubleshooting.</p>
+<h2>Sharing</h2>
+<p>We do not sell your data. We share it only with the service providers above, as needed to run the Service, or when required by law.</p>
+<h2>Your rights</h2>
+<p>You can ask for a copy or the deletion of your account data at ${contact}.</p>`,
+    },
+    refunds: {
+      title: "Refund Policy",
+      body: `
+<p>If ${brand} does not work for you, contact us at ${contact} within 14 days of a payment and we will refund that payment in full, no questions asked.</p>
+<p>After 14 days, payments are not refundable, but you can cancel at any time to stop future payments. Your plan stays active until the end of the period you paid for.</p>
+<p>Refunds are issued through Lemon Squeezy to your original payment method and usually appear within 5 to 10 business days.</p>`,
+    },
+  } as const;
+
+  const { title, body } = pages[page];
+  return layout(`${config.brandName}: ${title}`, `<h1>${title}</h1><p class="muted">Last updated: ${updated}</p>${body}`, config.contactEmail);
 }

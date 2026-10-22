@@ -14,11 +14,14 @@ export interface Config {
   adminToken?: string;
   maxFileBytes: number;
   monthlyLimits: Record<Plan, number>;
-  stripe: {
-    secretKey?: string;
+  contactEmail?: string;
+  legalName: string;
+  lemonSqueezy: {
+    apiKey?: string;
+    storeId?: string;
     webhookSecret?: string;
-    priceStarter?: string;
-    pricePro?: string;
+    variantStarter?: string;
+    variantPro?: string;
   };
 }
 
@@ -61,11 +64,14 @@ export function loadConfig(): Config {
       starter: int("LIMIT_STARTER", 300),
       pro: int("LIMIT_PRO", 1000),
     },
-    stripe: {
-      secretKey: process.env.STRIPE_SECRET_KEY || undefined,
-      webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || undefined,
-      priceStarter: process.env.STRIPE_PRICE_STARTER || undefined,
-      pricePro: process.env.STRIPE_PRICE_PRO || undefined,
+    contactEmail: process.env.CONTACT_EMAIL || undefined,
+    legalName: process.env.LEGAL_NAME || process.env.BRAND_NAME || "DocExtract",
+    lemonSqueezy: {
+      apiKey: cleanSecret(process.env.LEMONSQUEEZY_API_KEY),
+      storeId: process.env.LEMONSQUEEZY_STORE_ID || undefined,
+      webhookSecret: cleanSecret(process.env.LEMONSQUEEZY_WEBHOOK_SECRET),
+      variantStarter: process.env.LEMONSQUEEZY_VARIANT_STARTER || undefined,
+      variantPro: process.env.LEMONSQUEEZY_VARIANT_PRO || undefined,
     },
   };
 }

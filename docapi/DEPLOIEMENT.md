@@ -1,7 +1,7 @@
 # Mettre l'API en ligne avec Coolify
 
 L'API lit des factures, bons de commande et relevés bancaires (PDF ou image) et renvoie les données en JSON.
-Elle utilise Claude pour la lecture, et Stripe pour les abonnements.
+Elle utilise Claude pour la lecture, et Lemon Squeezy pour les abonnements.
 
 ## 1. Créer l'application dans Coolify
 
@@ -72,32 +72,49 @@ curl https://api.ton-domaine.com/v1/extract \
 
 `type` peut être `invoice`, `purchase_order`, `bank_statement` ou `auto` (l'API devine le type).
 
-## 6. Stripe (quand tu es prêt à encaisser)
+## 6. Lemon Squeezy (pour encaisser)
 
-Tant que Stripe n'est pas configuré, la page affiche « Coming soon » pour les forfaits payants
-et seul le forfait gratuit fonctionne.
+Tant que Lemon Squeezy n'est pas configuré, la page affiche « Coming soon » pour les forfaits payants
+et seul le forfait gratuit fonctionne. Lemon Squeezy est le « marchand officiel » : il encaisse les
+clients du monde entier, gère la TVA et les taxes, et te verse l'argent deux fois par mois.
 
-> Stripe n'ouvre pas de compte aux entreprises basées au Maroc. Il faut une société dans un pays
-> pris en charge (France, Espagne, États-Unis, etc.). Sinon il faudra une autre solution de paiement.
-
-1. Dans Stripe : **Catalogue de produits** → crée deux produits avec un prix **récurrent mensuel** :
-   Starter à **19 €** et Pro à **49 €**. Copie l'identifiant de chaque prix (`price_...`).
-2. **Développeurs** → **Webhooks** → **Ajouter un endpoint** :
-   - URL : `https://api.ton-domaine.com/billing/webhook`
-   - Événements : `customer.subscription.updated` et `customer.subscription.deleted`
-   - Copie le **secret de signature** (`whsec_...`).
-3. Active le **portail client** (Paramètres → Facturation → Portail client) pour que tes clients
-   puissent changer de forfait ou annuler eux-mêmes.
-4. Dans Coolify, ajoute ces variables puis redéploie :
+Ajoute d'abord ces deux variables (Lemon Squeezy vérifie tes pages légales avant d'activer les paiements) :
 
 | Nom | Valeur |
 |---|---|
-| `STRIPE_SECRET_KEY` | `sk_live_...` (ou `sk_test_...` pour tester) |
-| `STRIPE_WEBHOOK_SECRET` | `whsec_...` |
-| `STRIPE_PRICE_STARTER` | `price_...` du Starter |
-| `STRIPE_PRICE_PRO` | `price_...` du Pro |
+| `CONTACT_EMAIL` | l'adresse email de support affichée sur le site (ex. `support@ton-domaine.com`) |
+| `LEGAL_NAME` | ton nom ou celui de ta société, affiché dans les conditions d'utilisation |
 
-Commence en **mode test** de Stripe (clés `sk_test_...`, carte `4242 4242 4242 4242`) avant de passer en réel.
+Les pages `/terms`, `/privacy` et `/refunds` existent déjà sur ton site. Relis-les : ce sont des modèles,
+pas un avis juridique.
+
+Ensuite, dans Lemon Squeezy :
+
+1. **Products** → **New product** → « DocExtract Starter », prix **19 €**, **Subscription**, tous les mois.
+   Recommence pour « DocExtract Pro » à **49 €**.
+2. Pour chaque produit, note l'**ID de la variante** (Variant ID, un nombre) : ouvre le produit, la variante
+   par défaut a un ID visible dans l'URL ou dans le menu « … » → « Copy ID ».
+3. **Settings** → **Stores** : note l'**ID de ta boutique** (Store ID, un nombre).
+4. **Settings** → **API** → **New API key** : copie la clé (elle ne s'affiche qu'une fois).
+5. **Settings** → **Webhooks** → **+** :
+   - Callback URL : `https://TON-ADRESSE/billing/webhook`
+   - Signing secret : invente un long mot de passe (lettres et chiffres)
+   - Événements : coche tous ceux qui commencent par `subscription_`
+
+Puis, dans Coolify (avec **Literal** coché et **Build time** décoché), ajoute :
+
+| Nom | Valeur |
+|---|---|
+| `LEMONSQUEEZY_API_KEY` | la clé API de l'étape 4 |
+| `LEMONSQUEEZY_STORE_ID` | l'ID de la boutique (étape 3) |
+| `LEMONSQUEEZY_WEBHOOK_SECRET` | le signing secret de l'étape 5 |
+| `LEMONSQUEEZY_VARIANT_STARTER` | l'ID de variante du Starter |
+| `LEMONSQUEEZY_VARIANT_PRO` | l'ID de variante du Pro |
+
+Redéploie. Dans les **Logs**, tu dois voir `Paid plans enabled (Lemon Squeezy)`.
+
+Teste d'abord en **mode test** de Lemon Squeezy (interrupteur « Test mode », carte `4242 4242 4242 4242`) :
+après le paiement, tu dois revenir sur ton site et voir ta clé API Starter.
 
 ## 7. Suivre tes coûts
 

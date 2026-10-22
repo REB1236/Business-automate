@@ -1,19 +1,19 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import multipart from "@fastify/multipart";
 import formbody from "@fastify/formbody";
-import Stripe from "stripe";
 import crypto from "crypto";
 import type { Config, Plan } from "./config.js";
 import type { Account, Store } from "./db.js";
 import { DOC_TYPES, type DocType } from "./schemas.js";
 import { ExtractionError, SUPPORTED_MEDIA_TYPES, type Extractor, type MediaType } from "./extract.js";
-import { keyPage, landingPage, messagePage } from "./pages.js";
+import { keyPage, landingPage, legalPage, messagePage, pendingPage } from "./pages.js";
+import { PAID_STATUSES, type Billing } from "./billing.js";
 
 export interface AppDeps {
   config: Config;
   store: Store;
   extractor: Extractor;
-  stripe?: Stripe | null;
+  billing?: Billing | null;
 }
 
 export function redactUrl(url: string): string {
@@ -29,7 +29,7 @@ function safeEqual(a: string, b: string): boolean {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const FREE_SIGNUPS_PER_IP_PER_DAY = 3;
 
-export function buildApp({ config, store, extractor, stripe = null }: AppDeps): FastifyInstance {
+export function buildApp({ config, store, extractor, billing = null }: AppDeps): FastifyInstance {
   const app = Fastify({
     logger:
       process.env.NODE_ENV === "test"
@@ -45,10 +45,11 @@ export function buildApp({ config, store, extractor, stripe = null }: AppDeps): 
   app.register(formbody);
   app.register(multipart, { limits: { fileSize: config.maxFileBytes, files: 1, fields: 5 } });
 
-  const priceToPlan = new Map<string, Plan>();
-  if (config.stripe.priceStarter) priceToPlan.set(config.stripe.priceStarter, "starter");
-  if (config.stripe.pricePro) priceToPlan.set(config.stripe.pricePro, "pro");
-  const billingEnabled = Boolean(stripe && config.stripe.priceStarter && config.stripe.pricePro);
+  const ls = config.lemonSqueezy;
+  const variantToPlan = new Map<string, Plan>();
+  if (ls.variantStarter) variantToPlan.set(String(ls.variantStarter), "starter");
+  if (ls.variantPro) variantToPlan.set(String(ls.variantPro), "pro");
+  const billingEnabled = Boolean(billing && ls.variantStarter && ls.variantPro);
 
   const freeSignups = new Map<string, { day: string; count: number }>();
 
@@ -65,6 +66,9 @@ export function buildApp({ config, store, extractor, stripe = null }: AppDeps): 
 
   app.get("/", async (_request, reply) => reply.type("text/html").send(landingPage(config, billingEnabled)));
   app.get("/health", async () => ({ ok: true }));
+  for (const page of ["terms", "privacy", "refunds"] as const) {
+    app.get(`/${page}`, async (_request, reply) => reply.type("text/html").send(legalPage(config, page)));
+  }
 
   // ─── API ─────────────────────────────────────────────────────
 
@@ -154,89 +158,83 @@ export function buildApp({ config, store, extractor, stripe = null }: AppDeps): 
     return store.stats(month);
   });
 
-  // ─── Billing (Stripe) ────────────────────────────────────────
+  // ─── Billing (Lemon Squeezy) ─────────────────────────────────
+  // Flow: checkout (with a random token) → Lemon Squeezy payment → webhook creates the account
+  // and parks its key on the token → the buyer's success page shows the key once.
 
   app.post<{ Body: { plan?: string; email?: string } }>("/billing/checkout", async (request, reply) => {
-    if (!billingEnabled || !stripe) return reply.code(503).type("text/html").send(messagePage(config, "Not available", "Paid plans are not open yet."));
+    reply.type("text/html");
+    if (!billingEnabled || !billing) return reply.code(503).send(messagePage(config, "Not available", "Paid plans are not open yet."));
     const plan = request.body?.plan;
-    const price = plan === "starter" ? config.stripe.priceStarter : plan === "pro" ? config.stripe.pricePro : undefined;
-    if (!price) return reply.code(400).type("text/html").send(messagePage(config, "Unknown plan", "Choose Starter or Pro."));
+    const variantId = plan === "starter" ? ls.variantStarter : plan === "pro" ? ls.variantPro : undefined;
+    if (!variantId) return reply.code(400).send(messagePage(config, "Unknown plan", "Choose Starter or Pro."));
     const email = String(request.body?.email ?? "").trim().toLowerCase();
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      line_items: [{ price, quantity: 1 }],
-      customer_email: EMAIL_RE.test(email) ? email : undefined,
-      success_url: `${config.baseUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${config.baseUrl}/`,
+    const checkoutToken = crypto.randomBytes(24).toString("base64url");
+    store.createPendingCheckout(checkoutToken, plan as Plan);
+    const url = await billing.createCheckout({
+      variantId,
+      email: EMAIL_RE.test(email) ? email : undefined,
+      checkoutToken,
+      redirectUrl: `${config.baseUrl}/billing/success?token=${checkoutToken}`,
     });
-    return reply.redirect(session.url!, 303);
+    return reply.redirect(url, 303);
   });
 
-  app.get<{ Querystring: { session_id?: string } }>("/billing/success", async (request, reply) => {
+  app.get<{ Querystring: { token?: string } }>("/billing/success", async (request, reply) => {
     reply.type("text/html");
-    if (!stripe) return reply.code(503).send(messagePage(config, "Not available", "Paid plans are not open yet."));
-    const sessionId = request.query.session_id;
-    if (!sessionId) return reply.code(400).send(messagePage(config, "Missing session", "No checkout session was given."));
-
-    if (store.findByCheckoutSession(sessionId)) {
+    const token = request.query.token ?? "";
+    const pending = token ? store.getPendingCheckout(token) : undefined;
+    if (!pending) return reply.code(404).send(messagePage(config, "Unknown purchase", "This link is not valid."));
+    if (!pending.account_id) return reply.send(pendingPage(config));
+    const key = store.revealCheckoutKey(token);
+    if (!key) {
       return reply.send(
-        messagePage(config, "Key already issued", "The API key for this purchase was already shown. If you lost it, contact support."),
+        messagePage(config, "Key already shown", "The API key for this purchase was already shown. If you lost it, contact support."),
       );
     }
-
-    const session = await stripe.checkout.sessions.retrieve(sessionId, { expand: ["subscription"] });
-    if (session.status !== "complete" || session.payment_status !== "paid" || !session.subscription) {
-      return reply.code(402).send(messagePage(config, "Payment not completed", "The payment is not complete yet. Refresh this page in a minute."));
-    }
-    const subscription = session.subscription as Stripe.Subscription;
-    const plan = priceToPlan.get(subscription.items.data[0]?.price.id ?? "");
-    if (!plan) return reply.code(500).send(messagePage(config, "Unknown plan", "Contact support with your receipt."));
-
-    try {
-      const { key } = store.createAccount({
-        email: session.customer_details?.email ?? session.customer_email ?? "unknown",
-        plan,
-        stripeCustomerId: typeof session.customer === "string" ? session.customer : (session.customer?.id ?? null),
-        stripeSubscriptionId: subscription.id,
-        checkoutSessionId: session.id,
-      });
-      return reply.send(keyPage(config, key, plan));
-    } catch {
-      // A concurrent visit created it first.
-      return reply.send(messagePage(config, "Key already issued", "The API key for this purchase was already shown."));
-    }
+    return reply.send(keyPage(config, key, pending.plan));
   });
 
   app.post("/v1/billing/portal", async (request, reply) => {
     const account = authenticate(request, reply);
     if (!account) return reply;
-    if (!stripe || !account.stripe_customer_id) return reply.code(400).send({ error: "This key has no paid subscription." });
-    const portal = await stripe.billingPortal.sessions.create({ customer: account.stripe_customer_id, return_url: `${config.baseUrl}/` });
-    return { url: portal.url };
+    if (!billing || !account.billing_subscription_id) return reply.code(400).send({ error: "This key has no paid subscription." });
+    const url = await billing.customerPortalUrl(account.billing_subscription_id);
+    if (!url) return reply.code(502).send({ error: "Could not open the billing portal. Please retry." });
+    return { url };
   });
 
-  // The webhook needs the raw body to verify Stripe's signature.
+  // The webhook needs the raw body to verify the signature.
   app.register(async (scope) => {
     scope.addContentTypeParser("application/json", { parseAs: "buffer" }, (_req, body, done) => done(null, body));
     scope.post("/billing/webhook", async (request, reply) => {
-      if (!stripe || !config.stripe.webhookSecret) return reply.code(503).send();
-      let event: Stripe.Event;
-      try {
-        event = stripe.webhooks.constructEvent(
-          request.body as Buffer,
-          String(request.headers["stripe-signature"] ?? ""),
-          config.stripe.webhookSecret,
-        );
-      } catch {
+      if (!billing) return reply.code(503).send();
+      const raw = request.body as Buffer;
+      if (!billing.verifyWebhook(raw, String(request.headers["x-signature"] ?? ""))) {
         return reply.code(400).send({ error: "Invalid signature" });
       }
 
-      if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
-        const subscription = event.data.object;
-        const active = event.type === "customer.subscription.updated" && ["active", "trialing"].includes(subscription.status);
-        const plan = active ? (priceToPlan.get(subscription.items.data[0]?.price.id ?? "") ?? "free") : "free";
-        store.setPlanBySubscription(subscription.id, plan);
+      const event = JSON.parse(raw.toString("utf8"));
+      const name: string = event.meta?.event_name ?? "";
+      if (!name.startsWith("subscription_") || event.data?.type !== "subscriptions") return { received: true };
+
+      const subscriptionId = String(event.data.id);
+      const attributes = event.data.attributes ?? {};
+      const variantPlan = variantToPlan.get(String(attributes.variant_id));
+      const plan: Plan = variantPlan && PAID_STATUSES.has(attributes.status) ? variantPlan : "free";
+
+      // Create the account on the first paid event we see for this subscription (events can arrive out of order).
+      if (!store.findBySubscription(subscriptionId) && variantPlan && plan !== "free") {
+        store.fulfillCheckout({
+          token: event.meta?.custom_data?.checkout_token ?? null,
+          email: String(attributes.user_email ?? "unknown"),
+          plan,
+          customerId: String(attributes.customer_id ?? ""),
+          subscriptionId,
+        });
+      } else {
+        store.setPlanBySubscription(subscriptionId, plan);
       }
       return { received: true };
     });

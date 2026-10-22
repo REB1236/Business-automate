@@ -179,7 +179,7 @@ describe("docapi", () => {
     expect(store.usedThisMonth(store.findByKey(key)!.id)).toBe(0);
   });
 
-  it("keeps paid plans closed when Stripe is not configured", async () => {
+  it("keeps paid plans closed when billing is not configured", async () => {
     const res = await app.inject({ method: "POST", url: "/billing/checkout", payload: { plan: "starter", email: "a@b.co" } });
     expect(res.statusCode).toBe(503);
   });
