@@ -221,8 +221,58 @@ ${codeSamples(config.baseUrl, useCase.type, useCase.file)}
   );
 }
 
+export function noCodePage(config: Config): string {
+  const b = esc(config.baseUrl);
+  const { free } = config.monthlyLimits;
+  return layout(
+    "Extract invoice and bank statement data in Zapier, Make or n8n",
+    `<h1>Use ${esc(config.brandName)} in Zapier, Make or n8n</h1>
+<p class="lead">Read invoices, purchase orders and bank statements automatically inside your no-code workflows, with one HTTP request. No code to write.</p>
+<p><a href="/#pricing">Get a free API key</a>: ${free} documents per month, no card required.</p>
+
+<h2>Typical workflows</h2>
+<ul>
+<li>A supplier emails an invoice → the PDF is sent to ${esc(config.brandName)} → the invoice number, dates, totals and line items are added to Google Sheets, Airtable or your accounting tool.</li>
+<li>A bank statement is dropped in a cloud folder → every transaction is extracted → rows are appended to a spreadsheet for reconciliation.</li>
+<li>A purchase order arrives → its items and quantities create an order in your back office.</li>
+<li>Any document whose <code>checks</code> contain a <code>fail</code> is routed to a person for review instead of being booked automatically.</li>
+</ul>
+
+<h2>Set up the HTTP request</h2>
+<p>Every platform has a generic HTTP step (called "Webhooks" or "HTTP request" depending on the tool). Configure it like this:</p>
+<table>
+<tr><th>Setting</th><th>Value</th></tr>
+<tr><td>Method</td><td><code>POST</code></td></tr>
+<tr><td>URL</td><td><code>${b}/v1/extract</code></td></tr>
+<tr><td>Body type</td><td>Form data / multipart</td></tr>
+<tr><td>Field <code>file</code></td><td>The file from the previous step (email attachment, cloud file…)</td></tr>
+<tr><td>Field <code>type</code></td><td><code>invoice</code>, <code>purchase_order</code>, <code>bank_statement</code> or <code>auto</code></td></tr>
+<tr><td>Header</td><td><code>Authorization</code> = <code>Bearer YOUR_API_KEY</code></td></tr>
+</table>
+<p>The response is JSON. Map <code>data.invoice_number</code>, <code>data.total</code>, <code>data.line_items</code> or <code>data.transactions</code> to the next steps of your workflow. Extraction usually takes 5 to 30 seconds, so allow a timeout of at least 60 seconds.</p>
+
+<h2>Route uncertain documents to a human</h2>
+<p>Add a filter after the HTTP step: continue automatically only when no item in <code>checks</code> has <code>status</code> equal to <code>fail</code>. Send the others to an email or a review sheet. This keeps wrong totals out of your books.</p>
+
+<h2>Good to know</h2>
+<ul>
+<li>Failed extractions are not counted against your plan.</li>
+<li>Documents are processed in memory and never stored.</li>
+<li>Full field list in the <a href="/docs">API documentation</a>.</li>
+</ul>`,
+    config.contactEmail,
+    "",
+    {
+      baseUrl: config.baseUrl,
+      path: "/no-code",
+      description:
+        "Extract invoice, purchase order and bank statement data in Zapier, Make or n8n with one HTTP request. Structured JSON with verified totals. Free plan available.",
+    },
+  );
+}
+
 export function sitemapXml(config: Config): string {
-  const paths = ["/", "/docs", ...USE_CASES.map((u) => `/${u.slug}`), "/terms", "/privacy", "/refunds"];
+  const paths = ["/", "/docs", ...USE_CASES.map((u) => `/${u.slug}`), "/no-code", "/terms", "/privacy", "/refunds"];
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${paths.map((p) => `  <url><loc>${esc(config.baseUrl + p)}</loc></url>`).join("\n")}
@@ -264,6 +314,7 @@ export function llmsTxt(config: Config): string {
 - [Invoice to JSON](${config.baseUrl}/invoice-to-json)
 - [Bank statement to JSON](${config.baseUrl}/bank-statement-to-json)
 - [Purchase order to JSON](${config.baseUrl}/purchase-order-to-json)
+- [Zapier, Make and n8n](${config.baseUrl}/no-code)
 `;
 }
 

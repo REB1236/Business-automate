@@ -8,7 +8,7 @@ import { DOC_TYPES, type DocType } from "./schemas.js";
 import { ExtractionError, SUPPORTED_MEDIA_TYPES, type Extractor, type MediaType } from "./extract.js";
 import { keyPage, landingPage, legalPage, messagePage, pendingPage } from "./pages.js";
 import { PAID_STATUSES, type Billing } from "./billing.js";
-import { USE_CASES, docsPage, llmsTxt, openApiSpec, robotsTxt, sitemapXml, useCasePage } from "./seo.js";
+import { USE_CASES, docsPage, llmsTxt, noCodePage, openApiSpec, robotsTxt, sitemapXml, useCasePage } from "./seo.js";
 
 export interface AppDeps {
   config: Config;
@@ -71,6 +71,7 @@ export function buildApp({ config, store, extractor, billing = null }: AppDeps):
   for (const useCase of USE_CASES) {
     app.get(`/${useCase.slug}`, async (_request, reply) => reply.type("text/html").send(useCasePage(config, useCase)));
   }
+  app.get("/no-code", async (_request, reply) => reply.type("text/html").send(noCodePage(config)));
   app.get("/sitemap.xml", async (_request, reply) => reply.type("application/xml").send(sitemapXml(config)));
   app.get("/robots.txt", async (_request, reply) => reply.type("text/plain").send(robotsTxt(config)));
   app.get("/llms.txt", async (_request, reply) => reply.type("text/plain; charset=utf-8").send(llmsTxt(config)));

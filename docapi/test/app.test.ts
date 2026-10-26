@@ -200,7 +200,7 @@ describe("docapi", () => {
   });
 
   it("serves documentation, use-case pages and discovery files", async () => {
-    for (const path of ["/docs", "/invoice-to-json", "/bank-statement-to-json", "/purchase-order-to-json"]) {
+    for (const path of ["/docs", "/invoice-to-json", "/bank-statement-to-json", "/purchase-order-to-json", "/no-code"]) {
       const res = await app.inject({ method: "GET", url: path });
       expect(res.statusCode).toBe(200);
       expect(res.body).toContain('<meta name="description"');
@@ -208,6 +208,7 @@ describe("docapi", () => {
     }
     const sitemap = await app.inject({ method: "GET", url: "/sitemap.xml" });
     expect(sitemap.body).toContain("/invoice-to-json</loc>");
+    expect(sitemap.body).toContain("/no-code</loc>");
     expect((await app.inject({ method: "GET", url: "/robots.txt" })).body).toContain("Disallow: /admin/");
     expect((await app.inject({ method: "GET", url: "/llms.txt" })).body).toContain("POST");
     const spec = (await app.inject({ method: "GET", url: "/openapi.json" })).json();

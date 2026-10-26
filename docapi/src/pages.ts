@@ -60,7 +60,7 @@ export function layout(title: string, body: string, contact?: string, extraHead 
 </style>
 </head>
 <body><main>
-<nav><a href="/">DocExtract</a><a href="/docs">Docs</a><a href="/invoice-to-json">Invoices</a><a href="/bank-statement-to-json">Bank statements</a><a href="/purchase-order-to-json">Purchase orders</a><a href="/#pricing">Pricing</a></nav>
+<nav><a href="/">DocExtract</a><a href="/docs">Docs</a><a href="/invoice-to-json">Invoices</a><a href="/bank-statement-to-json">Bank statements</a><a href="/purchase-order-to-json">Purchase orders</a><a href="/no-code">No-code</a><a href="/#pricing">Pricing</a></nav>
 ${body}
 <footer>
   <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/refunds">Refunds</a>${contact ? ` · <a href="mailto:${escape(contact)}">${escape(contact)}</a>` : ""}
