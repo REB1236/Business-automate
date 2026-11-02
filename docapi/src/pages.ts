@@ -10,7 +10,8 @@ export interface Seo {
   jsonLd?: object;
 }
 
-export function layout(title: string, body: string, contact?: string, extraHead = "", seo?: Seo): string {
+export function layout(config: Config, title: string, body: string, extraHead = "", seo?: Seo): string {
+  const contact = config.contactEmail;
   const url = seo ? `${seo.baseUrl}${seo.path}` : "";
   const seoHead = seo
     ? `
@@ -60,7 +61,7 @@ export function layout(title: string, body: string, contact?: string, extraHead 
 </style>
 </head>
 <body><main>
-<nav><a href="/">DocExtract</a><a href="/docs">Docs</a><a href="/invoice-to-json">Invoices</a><a href="/bank-statement-to-json">Bank statements</a><a href="/purchase-order-to-json">Purchase orders</a><a href="/no-code">No-code</a><a href="/#pricing">Pricing</a></nav>
+<nav><a href="/">${escape(config.brandName)}</a><a href="/docs">Docs</a><a href="/invoice-to-json">Invoices</a><a href="/bank-statement-to-json">Bank statements</a><a href="/purchase-order-to-json">Purchase orders</a><a href="/no-code">No-code</a><a href="/#pricing">Pricing</a></nav>
 ${body}
 <footer>
   <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/refunds">Refunds</a>${contact ? ` · <a href="mailto:${escape(contact)}">${escape(contact)}</a>` : ""}
@@ -80,7 +81,7 @@ export function landingPage(config: Config, paidPlansEnabled: boolean): string {
          </form>`
       : `<p class="muted">Coming soon</p>`;
 
-  return layout(
+  return layout(config, 
     `${config.brandName}: documents to JSON`,
     `
 <h1>${escape(config.brandName)}</h1>
@@ -158,7 +159,6 @@ document.getElementById("free-form").addEventListener("submit", async (e) => {
 });
 </script>
 `,
-    config.contactEmail,
     "",
     {
       baseUrl: config.baseUrl,
@@ -184,30 +184,27 @@ document.getElementById("free-form").addEventListener("submit", async (e) => {
 }
 
 export function keyPage(config: Config, key: string, plan: string): string {
-  return layout(
+  return layout(config, 
     `${config.brandName}: your API key`,
     `<h1>Thanks for subscribing</h1>
 <p class="lead">Your ${escape(plan)} plan is active. Here is your API key. It is shown only once, so save it now.</p>
 <div class="key">${escape(key)}</div>
 <p><a href="/">Back to the docs</a></p>`,
-    config.contactEmail,
   );
 }
 
 export function messagePage(config: Config, title: string, message: string): string {
-  return layout(
+  return layout(config, 
     `${config.brandName}: ${title}`,
     `<h1>${escape(title)}</h1><p class="lead">${escape(message)}</p><p><a href="/">Back</a></p>`,
-    config.contactEmail,
   );
 }
 
 export function pendingPage(config: Config): string {
-  return layout(
+  return layout(config, 
     `${config.brandName}: confirming payment`,
     `<h1>Confirming your payment…</h1>
 <p class="lead">This usually takes a few seconds. This page refreshes by itself and will show your API key.</p>`,
-    config.contactEmail,
     `<meta http-equiv="refresh" content="4">`,
   );
 }
@@ -267,5 +264,5 @@ export function legalPage(config: Config, page: "terms" | "privacy" | "refunds")
   } as const;
 
   const { title, body } = pages[page];
-  return layout(`${config.brandName}: ${title}`, `<h1>${title}</h1><p class="muted">Last updated: ${updated}</p>${body}`, config.contactEmail);
+  return layout(config, `${config.brandName}: ${title}`, `<h1>${title}</h1><p class="muted">Last updated: ${updated}</p>${body}`);
 }

@@ -42,7 +42,7 @@ const { data, checks } = await res.json();</code></pre>`;
 export function docsPage(config: Config): string {
   const b = config.baseUrl;
   const { free, starter, pro } = config.monthlyLimits;
-  return layout(
+  return layout(config, 
     `${config.brandName} API documentation`,
     `<h1>API documentation</h1>
 <p class="lead">One endpoint. Send a document, get JSON back with every amount checked.</p>
@@ -107,7 +107,6 @@ ${codeSamples(b, "invoice", "invoice.pdf")}
 <tr><td>502</td><td>Temporary failure, retry (not counted)</td></tr>
 </table>
 <p>Failed requests never count against your quota. Documents are processed in memory and not stored.</p>`,
-    config.contactEmail,
     "",
     {
       baseUrl: b,
@@ -195,7 +194,7 @@ export const USE_CASES: UseCase[] = [
 
 export function useCasePage(config: Config, useCase: UseCase): string {
   const { free } = config.monthlyLimits;
-  return layout(
+  return layout(config, 
     useCase.title,
     `<h1>${esc(useCase.h1)}</h1>
 <p class="lead">${esc(useCase.lead)}</p>
@@ -215,7 +214,6 @@ ${codeSamples(config.baseUrl, useCase.type, useCase.file)}
 
 <h2>Privacy</h2>
 <p>Documents are processed in memory and never stored. Failed extractions are not counted against your plan. See the full <a href="/docs">API documentation</a>.</p>`,
-    config.contactEmail,
     "",
     { baseUrl: config.baseUrl, path: `/${useCase.slug}`, description: useCase.description },
   );
@@ -224,7 +222,7 @@ ${codeSamples(config.baseUrl, useCase.type, useCase.file)}
 export function noCodePage(config: Config): string {
   const b = esc(config.baseUrl);
   const { free } = config.monthlyLimits;
-  return layout(
+  return layout(config, 
     "Extract invoice and bank statement data in Zapier, Make or n8n",
     `<h1>Use ${esc(config.brandName)} in Zapier, Make or n8n</h1>
 <p class="lead">Read invoices, purchase orders and bank statements automatically inside your no-code workflows, with one HTTP request. No code to write.</p>
@@ -260,7 +258,6 @@ export function noCodePage(config: Config): string {
 <li>Documents are processed in memory and never stored.</li>
 <li>Full field list in the <a href="/docs">API documentation</a>.</li>
 </ul>`,
-    config.contactEmail,
     "",
     {
       baseUrl: config.baseUrl,

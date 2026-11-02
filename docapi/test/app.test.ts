@@ -217,6 +217,13 @@ describe("docapi", () => {
     expect((await app.inject({ method: "GET", url: "/" })).body).toContain('"@type":"SoftwareApplication"');
   });
 
+  it("uses BRAND_NAME in the navigation", async () => {
+    await app.close();
+    app = buildApp({ config: { ...config, brandName: "InvoiceKit" }, store, extractor: (input) => extractor(input) });
+    const res = await app.inject({ method: "GET", url: "/docs" });
+    expect(res.body).toContain('<nav><a href="/">InvoiceKit</a>');
+  });
+
   it("redacts the admin token from logged URLs", () => {
     expect(redactUrl("/admin/stats?token=abc123&month=2026-10")).toBe("/admin/stats?token=REDACTED&month=2026-10");
     expect(redactUrl("/v1/usage")).toBe("/v1/usage");
